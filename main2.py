@@ -1,10 +1,16 @@
 import os
-import zipfile
-import kaggle
+import numpy as np
 import pandas as pd
+import pickle
+
+# Scikit-learn preprocessing and splitting utilities
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+# Model and Evaluation Metrics
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
 """
 # 1. This is the exact Kaggle dataset identifier for the Bengaluru House Data
 dataset_slug = "amitabhajoy/bengaluru-house-price-data"
@@ -22,9 +28,16 @@ print(f"Done! Your files have been saved to the '{download_path}' folder.")
 #Data Preprocessing
 # Load the dataset
 server_df = pd.read_csv("data/Bengaluru_House_Data.csv")
-server_df.info()
-server_df.describe()
+
+# Clean up location spaces and group rare locations
+server_df['location'] = server_df['location'].astype(str).str.strip()
+location_stats = server_df['location'].value_counts()
+locations_less_than_10 = location_stats[location_stats <= 10]
+server_df['location'] = server_df['location'].apply(lambda x: 'other' if x in locations_less_than_10 else x)
+
+# Fill missing values
 server2_df = server_df.fillna(method='ffill')
+
 
 def func(total_sqft):
     try:
@@ -56,7 +69,8 @@ numerical_df = server2_df[['total_sqft', 'bath', 'balcony']].reset_index(drop=Tr
 encoded_df = encoded_df.reset_index(drop=True)
 
 x = pd.concat([encoded_df, numerical_df], axis=1)
-y = server2_df['price'].reset_index(drop=True)
+#Taking the log of the price
+y = np.log1p(server2_df['price']).reset_index(drop=True)
 
 #Spliting data
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size = 0.2, random_state = 42)
@@ -74,7 +88,39 @@ x_train_final[cols_to_scale] = x_train_scaled_cols
 x_test_final[cols_to_scale] = x_test_scaled_cols
 
 #Training the model
-model = LinearRegression()
-model.fit(x_scaled_df, y_train)
-print("Model Training is Complete")
-#print("Model R2 Score on test set: ", model.score(x_test_final, y_test))
+print("Training Random Forest Regressor model ...")
+model = RandomForestRegressor(n_estimators = 100, random_state = 42)
+model.fit(x_train_final, y_train)
+print("Model training is complete")
+
+#Error metrices to see real impact
+#making predictions on the test set
+y_pred_log = model.predict(x_test_final)
+
+#converting the logged predictions and logged true values back to their original states
+y_test_original = np.expm1(y_test)
+y_pred_original = np.expm1(y_pred_log)
+
+#calculate explicit error metrics
+mae = mean_absolute_error(y_test_original, y_pred_original)
+rmse = np.sqrt(mean_squared_error(y_test_original, y_pred_original))
+r2 = r2_score(y_test_original, y_pred_original)
+print(f"Mean Absolute Error: {mae:.2f} lakhs, \nRoot Mean Squared Error: {rmse:.2f} Lakhs")
+print(f"Model R2 Score on test set: {r2*100:.3f}%")
+
+#Exporting the encoder & scaler
+
+# Bundle everything the user interface will need into a single dictionary
+model_artifacts = {
+    'model': model,
+    'encoder': encoder,
+    'scaler': scaler,
+    'categorical_features': categorical_features,
+    'cols_to_scale': cols_to_scale
+}
+
+# Save the bundle to a file
+with open('bengaluru_house_production_bundle.pkl', 'wb') as f:
+    pickle.dump(model_artifacts, f)
+
+print("All production artifacts saved successfully!")
