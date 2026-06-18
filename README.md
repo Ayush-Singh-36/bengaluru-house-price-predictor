@@ -58,4 +58,5 @@ Backend API Interactive Docs: http://localhost:8000/docs
 
 ## Application Preview
 
-![Bengaluru House Price Predictor UI](https://github.com/user-attachments/assets/0fd971f3-e30b-4145-a15c-e6aaf32a12da)
+![Bengaluru House Price Predictor UI](<img width="1080" height="236" alt="Screenshot 2026-06-18 185225" src="https://github.com/user-attachments/assets/acbb2ff7-6d45-42d3-864b-034ef2e2d0d8" />
+)
