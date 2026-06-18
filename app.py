@@ -1,7 +1,6 @@
 import streamlit as st
 import pickle
-import pandas as pd
-import numpy as np
+import requests  # Used to communicate with our FastAPI server
 
 # Set up browser page configuration
 st.set_page_config(page_title="Bengaluru House Price Predictor", layout="centered")
@@ -9,37 +8,38 @@ st.set_page_config(page_title="Bengaluru House Price Predictor", layout="centere
 st.title("🏡 Bengaluru House Price Predictor")
 st.write("Enter the property details below to estimate its real estate market value.")
 
-# 1. Load the frozen production artifacts
+# 1. Define the URL of your FastAPI endpoint
+# When running locally, Uvicorn hosts on port 8000
+API_URL = "http://127.0.0.1:8000/predict"
+
+# 2. Load just the encoder metadata to populate the dropdown menus safely
 @st.cache_resource
-def load_artifacts():
+def load_dropdown_options():
     with open('bengaluru_house_production_bundle.pkl', 'rb') as f:
-        return pickle.load(f)
+        artifacts = pickle.load(f)
+    
+    # We only extract column names here—no model math or scalers needed!
+    encoder = artifacts['encoder']
+    cat_features = artifacts['categorical_features']
+    all_cols = encoder.get_feature_names_out(cat_features)
+    
+    return {
+        'area_types': [col.replace('area_type_', '') for col in all_cols if col.startswith('area_type_')],
+        'availabilities': [col.replace('availability_', '') for col in all_cols if col.startswith('availability_')],
+        'locations': [col.replace('location_', '') for col in all_cols if col.startswith('location_')],
+        'sizes': [col.replace('size_', '') for col in all_cols if col.startswith('size_')]
+    }
 
-artifacts = load_artifacts()
-model = artifacts['model']
-encoder = artifacts['encoder']
-scaler = artifacts['scaler']
-categorical_features = artifacts['categorical_features']
-cols_to_scale = artifacts['cols_to_scale']
+options = load_dropdown_options()
 
-# --- SAFE EXTRACTION OF DROPDOWN VALUES ---
-# Get all feature names out using the full categorical_features list
-all_encoded_cols = encoder.get_feature_names_out(categorical_features)
-
-# Extract unique values for our dropdown selection menus safely
-area_types = [col.replace('area_type_', '') for col in all_encoded_cols if col.startswith('area_type_')]
-availabilities = [col.replace('availability_', '') for col in all_encoded_cols if col.startswith('availability_')]
-locations = [col.replace('location_', '') for col in all_encoded_cols if col.startswith('location_')]
-sizes = [col.replace('size_', '') for col in all_encoded_cols if col.startswith('size_')]
-
-# 2. Build the User Interface Layout
+# 3. Build the User Interface Layout
 col1, col2 = st.columns(2)
 
 with col1:
-    user_area_type = st.selectbox("Area Type", sorted(area_types))
-    user_location = st.selectbox("Location", sorted(locations))
-    user_size = st.selectbox("Size / BHK", sorted(sizes))
-    user_availability = st.selectbox("Availability Status", sorted(availabilities))
+    user_area_type = st.selectbox("Area Type", sorted(options['area_types']))
+    user_location = st.selectbox("Location", sorted(options['locations']))
+    user_size = st.selectbox("Size / BHK", sorted(options['sizes']))
+    user_availability = st.selectbox("Availability Status", sorted(options['availabilities']))
 
 with col2:
     user_sqft = st.number_input("Total Square Footage", min_value=100, max_value=50000, value=1200)
@@ -49,37 +49,31 @@ with col2:
 # Default society name for simplicity
 user_society = "other"
 
-# 3. Prediction Execution Block
+# 4. Prediction Execution Block via API
 if st.button("Calculate Estimated Value", type="primary"):
-    # Convert input to DataFrame with ALL columns present
-    user_data = pd.DataFrame([{
-        'area_type': user_area_type,
-        'availability': user_availability,
-        'location': user_location,
-        'size': user_size,
-        'society': user_society,
-        'total_sqft': float(user_sqft),
-        'bath': float(user_bath),
-        'balcony': float(user_balcony)
-    }])
-
-    # Transform categories using the fitted encoder (Passing all features safely)
-    encoded_user_features = encoder.transform(user_data[categorical_features])
-    encoded_user_df = pd.DataFrame(encoded_user_features, columns=all_encoded_cols)
-
-    # Combine numerical variables and scale them
-    numerical_user_df = user_data[['total_sqft', 'bath', 'balcony']]
-    x_user = pd.concat([encoded_user_df, numerical_user_df], axis=1)
     
-    # Scale numerical inputs
-    x_user[cols_to_scale] = scaler.transform(x_user[cols_to_scale])
+    # Bundle inputs into a standard Python dictionary (JSON shape)
+    payload = {
+        "area_type": user_area_type,
+        "availability": user_availability,
+        "location": user_location,
+        "size": user_size,
+        "society": user_society,
+        "total_sqft": float(user_sqft),
+        "bath": float(user_bath),
+        "balcony": float(user_balcony)
+    }
 
-    # Ensure column order matches the model training exactly
-    # (Fixes any mismatch bugs between fit and predict shapes)
-    x_user = x_user[model.feature_names_in_]
-
-    # Predict
-    predicted_price = model.predict(x_user)[0]
-
-    # Show result to user
-    st.success(f"### Estimated Price: ₹ {predicted_price:.2f} Lakhs")
+    try:
+        # Send an HTTP POST request to the FastAPI backend microservice
+        response = requests.post(API_URL, json=payload)
+        
+        if response.status_code == 200:
+            result = response.json()
+            predicted_price = result["estimated_price_lakhs"]
+            st.success(f"### Estimated Price: ₹ {predicted_price:.2f} Lakhs")
+        else:
+            st.error(f"Backend Server Error: Received status code {response.status_code}")
+            
+    except requests.exceptions.ConnectionError:
+        st.error("Could not connect to the Backend API! Is your Uvicorn terminal running?")
