@@ -9,8 +9,8 @@ st.title("🏡 Bengaluru House Price Predictor")
 st.write("Enter the property details below to estimate its real estate market value.")
 
 # 1. Define the URL of your FastAPI endpoint
-# When running locally, Uvicorn hosts on port 8000
-API_URL = "http://127.0.0.1:8000/predict"
+# Change this line in app.py:
+API_URL = "http://backend-api:8000/predict"
 
 # 2. Load just the encoder metadata to populate the dropdown menus safely
 @st.cache_resource
