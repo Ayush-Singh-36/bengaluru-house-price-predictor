@@ -11,20 +11,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-"""
-# 1. This is the exact Kaggle dataset identifier for the Bengaluru House Data
-dataset_slug = "amitabhajoy/bengaluru-house-price-data"
 
-# 2. This creates a folder named 'data' inside your current VS Code workspace
-download_path = "./data"
-
-print("Downloading Bengaluru House Price dataset from Kaggle...")
-
-# 3. This executes the automated download and extraction via Command Prompt
-os.system(f"kaggle datasets download -d {dataset_slug} -p {download_path} --unzip")
-
-print(f"Done! Your files have been saved to the '{download_path}' folder.")
-"""
 #Data Preprocessing
 # Load the dataset
 server_df = pd.read_csv("data/Bengaluru_House_Data.csv")
