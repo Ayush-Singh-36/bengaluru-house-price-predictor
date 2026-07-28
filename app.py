@@ -66,7 +66,7 @@ if st.button("Calculate Estimated Value", type="primary"):
 
     try:
         # Send an HTTP POST request to the FastAPI backend microservice
-        response = requests.post(API_URL, json=payload)
+        response = requests.post(API_URL, json=payload, timeout=5)
         
         if response.status_code == 200:
             result = response.json()
