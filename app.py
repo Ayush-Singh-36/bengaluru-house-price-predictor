@@ -8,13 +8,11 @@ st.set_page_config(page_title="Bengaluru House Price Predictor", layout="centere
 st.title("🏡 Bengaluru House Price Predictor")
 st.write("Enter the property details below to estimate its real estate market value.")
 
-# 1. Load the full artifact bundle directly with loading indicator
+# 1. Load the full artifact bundle directly
 @st.cache_resource
 def load_artifacts():
-    with st.spinner("Loading model and artifacts from disk..."):
-        with open('bengaluru_house_production_bundle.pkl', 'rb') as f:
-            data = pickle.load(f)
-    return data
+    with open('bengaluru_house_production_bundle.pkl', 'rb') as f:
+        return pickle.load(f)
 
 try:
     artifacts = load_artifacts()
@@ -25,13 +23,14 @@ try:
     scaler = artifacts.get('scaler')
     cat_features = artifacts['categorical_features']
 
-    # Extract dropdown choices dynamically from encoder
-    all_cols = encoder.get_feature_names_out(cat_features)
+    # Extract dropdown choices dynamically from encoder categories
+    categories = encoder.categories_
     options = {
-        'area_types': [col.replace('area_type_', '') for col in all_cols if col.startswith('area_type_')],
-        'availabilities': [col.replace('availability_', '') for col in all_cols if col.startswith('availability_')],
-        'locations': [col.replace('location_', '') for col in all_cols if col.startswith('location_')],
-        'sizes': [col.replace('size_', '') for col in all_cols if col.startswith('size_')]
+        'area_types': list(categories[0]),
+        'availabilities': list(categories[1]),
+        'locations': list(categories[2]),
+        'sizes': list(categories[3]),
+        'societies': list(categories[4]) if len(categories) > 4 else ['other']
     }
 
     # 2. Build the User Interface Layout
@@ -48,34 +47,38 @@ try:
         user_bath = st.number_input("Number of Bathrooms", min_value=1, max_value=10, value=2)
         user_balcony = st.number_input("Number of Balconies", min_value=0, max_value=5, value=1)
 
-    user_society = "other"
+    user_society = options['societies'][0] if options['societies'] else "other"
 
     # 3. Direct In-Memory Prediction Execution Block
     if st.button("Calculate Estimated Value", type="primary"):
         try:
-            # Create DataFrames for features
-            cat_df = pd.DataFrame([{
+            # Construct complete input DataFrame matching raw feature names
+            input_df = pd.DataFrame([{
                 "area_type": user_area_type,
                 "availability": user_availability,
                 "location": user_location,
                 "size": user_size,
-                "society": user_society
-            }])
-            
-            num_df = pd.DataFrame([{
+                "society": user_society,
                 "total_sqft": float(user_sqft),
                 "bath": float(user_bath),
                 "balcony": float(user_balcony)
             }])
 
-            # Transform categorical features
+            # Extract categorical and numerical parts
+            cat_df = input_df[cat_features]
+            num_df = input_df[["total_sqft", "bath", "balcony"]]
+
+            # Encode categoricals using fitted OneHotEncoder
             cat_encoded = encoder.transform(cat_df)
-            cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out(cat_features))
+            
+            # Use get_feature_names_out on encoder directly
+            encoded_feature_names = encoder.get_feature_names_out(cat_features)
+            cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoded_feature_names)
 
-            # Combine numerical and categorical features
-            X_input = pd.concat([num_df, cat_encoded_df], axis=1)
+            # Combine numerical and encoded categorical features
+            X_input = pd.concat([num_df.reset_index(drop=True), cat_encoded_df.reset_index(drop=True)], axis=1)
 
-            # Scale features if scaler exists in pipeline
+            # Scale features if scaler exists
             if scaler:
                 X_input = scaler.transform(X_input)
 
