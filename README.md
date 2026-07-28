@@ -1,62 +1,62 @@
 # 🏡 Bengaluru House Price Predictor
 
-A containerized, full-stack machine learning application that predicts residential real estate prices in Bengaluru, India. This project transitions a standalone machine learning model into a production-ready microservice architecture using a decoupled frontend and backend.
+A streamlined, end-to-end machine learning web application that estimates residential real estate prices in Bengaluru, India based on key property characteristics. 
+
+---
+
+## 🚀 Live Demo
+
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://bengaluru-house-price-predictor-pq8vmj45uf8pbty4mj9gw5.streamlit.app/)
+
+👉 **Try the Live App:** [Bengaluru House Price Predictor](https://bengaluru-house-price-predictor-pq8vmj45uf8pbty4mj9gw5.streamlit.app/)
 
 ---
 
 ## 🛠️ System Architecture
 
-Instead of a monolithic script, the application is engineered as two isolated services that communicate securely across a virtual bridge network:
+The application is deployed directly on **Streamlit Cloud** using an in-memory prediction pipeline for fast, low-latency inferencing:
 
-* **Backend API (FastAPI):** An ultra-fast asynchronous Python framework that loads the trained pipeline model artifact (`bengaluru_house_production_bundle.pkl`), exposes a structured REST API endpoint (`/predict`), processes incoming JSON payloads, and handles inference.
-  
-* **Frontend UI (Streamlit):** A responsive web interface allowing users to dynamically input property configurations and view predictions in real-time.
-
----
-
-## 🚀 Key Features
-
-* **Dynamic Data Inputs:** Select from over 100+ unique locations across Bengaluru via an intuitive user interface.
-  
-* **Decoupled Architecture:** Frontend and backend components are completely separated, matching industry deployment patterns.
-  
-* **Full Containerization:** Standardized configurations ensure the complete stack spins up identically on any machine with zero local dependency conflicts.
-  
-* **Optimized Image Builds:** Utilizes tailored slim base footprints (`python:3.11-slim`) to keep container weights minimal.
+* **Frontend UI & Processing (Streamlit):** Interactive user interface built with Streamlit to accept property parameters (location, square footage, BHK size, bathrooms, balconies, and area type).
+* **Inference Pipeline (Scikit-Learn):** Loads pre-trained model artifacts (`bengaluru_house_production_bundle.pkl`) directly into memory. Preprocesses input features with categorical One-Hot Encoding and numerical scaling, then performs real-time valuation inference.
+* **Smart Formatting:** Dynamically calculates estimated valuations and formats results intuitively in **Lakhs** or **Crores**.
 
 ---
 
-## 📦 Project Directory Structure
+## 📦 Repository Structure
 
 ```text
-├── data/                                 # Raw or processed dataset tracking files
-├── venv/                                 # Local virtual environment (ignored by Git)
-├── api.py                                # FastAPI backend application logic
-├── app.py                                # Streamlit frontend interface UI
-├── bengaluru_house_production_bundle.pkl # Trained ML pipeline model weights
-├── Dockerfile.api                        # Blueprint for the backend API container
-├── Dockerfile.app                        # Blueprint for the frontend web container
-├── docker-compose.yml                    # Multi-container orchestration specification
-├── requirements.txt                      # Global application dependencies
-└── README.md                             # Project documentation
+bengaluru-house-price-predictor/
+├── app.py                             # Main Streamlit web application & prediction logic
+├── bengaluru_house_production_bundle.pkl  # Trained ML model, OneHotEncoder, and scaler artifacts
+├── requirements.txt                   # Python dependencies for deployment
+└── README.md                          # Project documentation
+💻 Running Locally
 
-How to Run the Application Locally
-Make sure you have Docker Desktop installed and running on your system.
-
-Installation & Launch
-Clone this repository to your local machine:
-
-git clone [https://github.com/YOUR_USERNAME/bengaluru-house-price-predictor.git](https://github.com/YOUR_USERNAME/bengaluru-house-price-predictor.git)
+To run this app on your local machine:
+Clone the repository:
+git clone [https://github.com/Ayush-Singh-36/bengaluru-house-price-predictor.git](https://github.com/Ayush-Singh-36/bengaluru-house-price-predictor.git)
 cd bengaluru-house-price-predictor
 
-Build and launch the microservice network with a single command:
-docker compose up --build
+Create and activate a virtual environment:
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-Access the services in your browser:
-Frontend Interface UI: http://localhost:8501
-Backend API Interactive Docs: http://localhost:8000/docs
+Install dependencies:
+pip install -r requirements.txt
+Launch the Streamlit app:
+streamlit run app.py
 
-## Application Preview
+🛠️ Tech Stack
+Language: Python
+Machine Learning: Scikit-Learn, Pandas, NumPy
+Web Framework: Streamlit
+Deployment & CI/CD: Streamlit Cloud, GitHub
 
-![Bengaluru House Price Predictor UI](screenshot.png<img width="1620" height="1194" alt="screenshot" src="https://github.com/user-attachments/assets/40a76934-d088-422b-b5c9-24361438be55" />
-)
+
+---
+
+### Step-by-Step Instructions:
+
+1. On your current GitHub tab ([Editing README.md](https://github.com/Ayush-Singh-36/bengaluru-house-price-predictor/edit/main/README.md)), select all existing text and delete it.
+2. Paste the markdown block above into the editor.
+3. Click the green **Commit changes...** button at the top right.
