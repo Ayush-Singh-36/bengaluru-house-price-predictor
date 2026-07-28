@@ -17,21 +17,30 @@ def load_artifacts():
 try:
     artifacts = load_artifacts()
 
-    # Extract components from the pickle file
     model = artifacts['model']
-    encoder = artifacts['encoder']
+    encoder = artifacts.get('encoder')
     scaler = artifacts.get('scaler')
-    cat_features = artifacts['categorical_features']
+    cat_features = artifacts.get('categorical_features', ['area_type', 'availability', 'location', 'size', 'society'])
 
-    # Extract dropdown choices dynamically from encoder categories
-    categories = encoder.categories_
-    options = {
-        'area_types': list(categories[0]),
-        'availabilities': list(categories[1]),
-        'locations': list(categories[2]),
-        'sizes': list(categories[3]),
-        'societies': list(categories[4]) if len(categories) > 4 else ['other']
-    }
+    # Extract dropdown choices dynamically from encoder categories if available
+    if encoder and hasattr(encoder, 'categories_'):
+        categories = encoder.categories_
+        options = {
+            'area_types': list(categories[0]),
+            'availabilities': list(categories[1]),
+            'locations': list(categories[2]),
+            'sizes': list(categories[3]),
+            'societies': list(categories[4]) if len(categories) > 4 else ['other']
+        }
+    else:
+        # Fallbacks if categories can't be parsed directly from encoder
+        options = {
+            'area_types': ['Built-up Area', 'Carpet Area', 'Plot Area', 'Super built-up Area'],
+            'availabilities': ['Ready To Move', '18-May', '18-Dec'],
+            'locations': ['1st Block Jayanagar', 'Electronic City', 'Whitefield'],
+            'sizes': ['1 BHK', '2 BHK', '3 BHK', '4 BHK'],
+            'societies': ['other']
+        }
 
     # 2. Build the User Interface Layout
     col1, col2 = st.columns(2)
@@ -52,8 +61,8 @@ try:
     # 3. Direct In-Memory Prediction Execution Block
     if st.button("Calculate Estimated Value", type="primary"):
         try:
-            # Construct complete input DataFrame matching raw feature names
-            input_df = pd.DataFrame([{
+            # Create raw input DataFrame
+            raw_input_df = pd.DataFrame([{
                 "area_type": user_area_type,
                 "availability": user_availability,
                 "location": user_location,
@@ -64,23 +73,48 @@ try:
                 "balcony": float(user_balcony)
             }])
 
-            # Extract categorical and numerical parts
-            cat_df = input_df[cat_features]
-            num_df = input_df[["total_sqft", "bath", "balcony"]]
-
-            # Encode categoricals using fitted OneHotEncoder
-            cat_encoded = encoder.transform(cat_df)
-            encoded_feature_names = encoder.get_feature_names_out(cat_features)
-            cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoded_feature_names)
-
-            # Combine numerical and encoded categorical features
-            X_input = pd.concat([num_df.reset_index(drop=True), cat_encoded_df.reset_index(drop=True)], axis=1)
-
-            # Align column sequence dynamically with model training order
+            # Check if model expects raw column names (e.g. 'area_type', 'location'...)
             if hasattr(model, "feature_names_in_"):
-                X_input = X_input[model.feature_names_in_]
+                expected_features = list(model.feature_names_in_)
+                
+                # Case A: Model expects original raw un-encoded columns
+                if set(cat_features).issubset(set(expected_features)):
+                    X_input = raw_input_df[expected_features]
+                
+                # Case B: Model expects One-Hot Encoded columns
+                else:
+                    cat_df = raw_input_df[cat_features]
+                    num_df = raw_input_df[["total_sqft", "bath", "balcony"]]
+                    
+                    if encoder:
+                        cat_encoded = encoder.transform(cat_df)
+                        
+                        # Try transformation with and without prefixed names
+                        try:
+                            encoded_feature_names = encoder.get_feature_names_out(cat_features)
+                        except Exception:
+                            encoded_feature_names = [f"col_{i}" for i in range(cat_encoded.shape[1])]
+                            
+                        cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoded_feature_names)
+                        X_input = pd.concat([cat_encoded_df.reset_index(drop=True), num_df.reset_index(drop=True)], axis=1)
+                    else:
+                        X_input = raw_input_df
 
-            # Scale features if scaler exists
+                    # Filter or align to expected features if matched
+                    matching_cols = [c for c in expected_features if c in X_input.columns]
+                    if len(matching_cols) == len(expected_features):
+                        X_input = X_input[expected_features]
+
+            else:
+                # If model has no feature_names_in_ metadata, construct standard encoded array
+                cat_df = raw_input_df[cat_features]
+                num_df = raw_input_df[["total_sqft", "bath", "balcony"]]
+                cat_encoded = encoder.transform(cat_df)
+                encoded_feature_names = encoder.get_feature_names_out(cat_features)
+                cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoded_feature_names)
+                X_input = pd.concat([cat_encoded_df.reset_index(drop=True), num_df.reset_index(drop=True)], axis=1)
+
+            # Apply scaler if present
             if scaler:
                 X_input = scaler.transform(X_input)
 
