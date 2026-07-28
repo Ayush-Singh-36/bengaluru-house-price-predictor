@@ -9,7 +9,6 @@ st.title("🏡 Bengaluru House Price Predictor")
 st.write("Enter the property details below to estimate its real estate market value.")
 
 # 1. Define the URL of your FastAPI endpoint
-# Change this line in app.py:
 API_URL = "http://backend-api:8000/predict"
 
 # 2. Load just the encoder metadata to populate the dropdown menus safely
@@ -18,7 +17,7 @@ def load_dropdown_options():
     with open('bengaluru_house_production_bundle.pkl', 'rb') as f:
         artifacts = pickle.load(f)
     
-    # We only extract column names here—no model math or scalers needed!
+    # Extract column names—no model math or scalers needed!
     encoder = artifacts['encoder']
     cat_features = artifacts['categorical_features']
     all_cols = encoder.get_feature_names_out(cat_features)
@@ -46,13 +45,13 @@ with col2:
     user_bath = st.number_input("Number of Bathrooms", min_value=1, max_value=10, value=2)
     user_balcony = st.number_input("Number of Balconies", min_value=0, max_value=5, value=1)
 
-# Default society name for simplicity
+# Default society name
 user_society = "other"
 
 # 4. Prediction Execution Block via API
 if st.button("Calculate Estimated Value", type="primary"):
     
-    # Bundle inputs into a standard Python dictionary (JSON shape)
+    # Bundle inputs into a standard Python dictionary
     payload = {
         "area_type": user_area_type,
         "availability": user_availability,
@@ -65,15 +64,22 @@ if st.button("Calculate Estimated Value", type="primary"):
     }
 
     try:
-        # Send an HTTP POST request to the FastAPI backend microservice
+        # Send HTTP POST request to FastAPI backend microservice
         response = requests.post(API_URL, json=payload, timeout=5)
         
         if response.status_code == 200:
             result = response.json()
-            predicted_price = result["estimated_price_lakhs"]
-            st.success(f"### Estimated Price: ₹ {predicted_price:.2f} Lakhs")
+            predicted_price = result.get("estimated_price_lakhs", result.get("predicted_price_lakhs", 0))
+            
+            # --- Auto-convert Lakhs to Crore if >= 100 ---
+            if predicted_price >= 100:
+                price_in_crore = predicted_price / 100.0
+                st.success(f"### Estimated Price: ₹ {price_in_crore:.2f} Crore")
+            else:
+                st.success(f"### Estimated Price: ₹ {predicted_price:.2f} Lakhs")
+                
         else:
             st.error(f"Backend Server Error: Received status code {response.status_code}")
             
-    except requests.exceptions.ConnectionError:
-        st.error("Could not connect to the Backend API! Is your Uvicorn terminal running?")
+    except requests.exceptions.RequestException:
+        st.error("Could not connect to the Backend API! Is your FastAPI server running?")
