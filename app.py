@@ -1,6 +1,6 @@
 import streamlit as st
 import pickle
-import requests  # Used to communicate with our FastAPI server
+import pandas as pd
 
 # Set up browser page configuration
 st.set_page_config(page_title="Bengaluru House Price Predictor", layout="centered")
@@ -8,30 +8,30 @@ st.set_page_config(page_title="Bengaluru House Price Predictor", layout="centere
 st.title("🏡 Bengaluru House Price Predictor")
 st.write("Enter the property details below to estimate its real estate market value.")
 
-# 1. Define the URL of your FastAPI endpoint
-API_URL = "http://backend-api:8000/predict"
-
-# 2. Load just the encoder metadata to populate the dropdown menus safely
+# 1. Load the full artifact bundle (Model + Encoder + Scaler) directly
 @st.cache_resource
-def load_dropdown_options():
+def load_artifacts():
     with open('bengaluru_house_production_bundle.pkl', 'rb') as f:
-        artifacts = pickle.load(f)
-    
-    # Extract column names—no model math or scalers needed!
-    encoder = artifacts['encoder']
-    cat_features = artifacts['categorical_features']
-    all_cols = encoder.get_feature_names_out(cat_features)
-    
-    return {
-        'area_types': [col.replace('area_type_', '') for col in all_cols if col.startswith('area_type_')],
-        'availabilities': [col.replace('availability_', '') for col in all_cols if col.startswith('availability_')],
-        'locations': [col.replace('location_', '') for col in all_cols if col.startswith('location_')],
-        'sizes': [col.replace('size_', '') for col in all_cols if col.startswith('size_')]
-    }
+        return pickle.load(f)
 
-options = load_dropdown_options()
+artifacts = load_artifacts()
 
-# 3. Build the User Interface Layout
+# Extract components from the pickle file
+model = artifacts['model']
+encoder = artifacts['encoder']
+scaler = artifacts.get('scaler')  # Extracts scaler if present in bundle
+cat_features = artifacts['categorical_features']
+
+# Extract dropdown choices dynamically from encoder
+all_cols = encoder.get_feature_names_out(cat_features)
+options = {
+    'area_types': [col.replace('area_type_', '') for col in all_cols if col.startswith('area_type_')],
+    'availabilities': [col.replace('availability_', '') for col in all_cols if col.startswith('availability_')],
+    'locations': [col.replace('location_', '') for col in all_cols if col.startswith('location_')],
+    'sizes': [col.replace('size_', '') for col in all_cols if col.startswith('size_')]
+}
+
+# 2. Build the User Interface Layout
 col1, col2 = st.columns(2)
 
 with col1:
@@ -45,41 +45,46 @@ with col2:
     user_bath = st.number_input("Number of Bathrooms", min_value=1, max_value=10, value=2)
     user_balcony = st.number_input("Number of Balconies", min_value=0, max_value=5, value=1)
 
-# Default society name
 user_society = "other"
 
-# 4. Prediction Execution Block via API
+# 3. Direct In-Memory Prediction Execution Block
 if st.button("Calculate Estimated Value", type="primary"):
-    
-    # Bundle inputs into a standard Python dictionary
-    payload = {
-        "area_type": user_area_type,
-        "availability": user_availability,
-        "location": user_location,
-        "size": user_size,
-        "society": user_society,
-        "total_sqft": float(user_sqft),
-        "bath": float(user_bath),
-        "balcony": float(user_balcony)
-    }
-
     try:
-        # Send HTTP POST request to FastAPI backend microservice
-        response = requests.post(API_URL, json=payload, timeout=5)
+        # Create DataFrames for features
+        cat_df = pd.DataFrame([{
+            "area_type": user_area_type,
+            "availability": user_availability,
+            "location": user_location,
+            "size": user_size,
+            "society": user_society
+        }])
         
-        if response.status_code == 200:
-            result = response.json()
-            predicted_price = result.get("estimated_price_lakhs", result.get("predicted_price_lakhs", 0))
-            
-            # --- Auto-convert Lakhs to Crore if >= 100 ---
-            if predicted_price >= 100:
-                price_in_crore = predicted_price / 100.0
-                st.success(f"### Estimated Price: ₹ {price_in_crore:.2f} Crore")
-            else:
-                st.success(f"### Estimated Price: ₹ {predicted_price:.2f} Lakhs")
-                
+        num_df = pd.DataFrame([{
+            "total_sqft": float(user_sqft),
+            "bath": float(user_bath),
+            "balcony": float(user_balcony)
+        }])
+
+        # Transform categorical features
+        cat_encoded = encoder.transform(cat_df)
+        cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out(cat_features))
+
+        # Combine numerical and categorical features
+        X_input = pd.concat([num_df, cat_encoded_df], axis=1)
+
+        # Scale features if scaler exists in pipeline
+        if scaler:
+            X_input = scaler.transform(X_input)
+
+        # Generate direct prediction
+        predicted_price = float(model.predict(X_input)[0])
+
+        # Auto-convert >= 100 Lakhs to Crore
+        if predicted_price >= 100:
+            price_in_crore = predicted_price / 100.0
+            st.success(f"### Estimated Price: ₹ {price_in_crore:.2f} Crore")
         else:
-            st.error(f"Backend Server Error: Received status code {response.status_code}")
-            
-    except requests.exceptions.RequestException:
-        st.error("Could not connect to the Backend API! Is your FastAPI server running?")
+            st.success(f"### Estimated Price: ₹ {predicted_price:.2f} Lakhs")
+
+    except Exception as e:
+        st.error(f"Error calculating prediction: {str(e)}")
