@@ -1,6 +1,7 @@
 import streamlit as st
 import pickle
 import pandas as pd
+import numpy as np
 
 # Set up browser page configuration
 st.set_page_config(page_title="Bengaluru House Price Predictor", layout="centered")
@@ -103,7 +104,13 @@ try:
                 X_input = scaler.transform(X_input)
 
             # Generate direct prediction
-            predicted_price = float(model.predict(X_input)[0])
+            raw_prediction = float(model.predict(X_input)[0])
+
+            # Inverse log transformation (expm1) if log1p was used on target variable during training
+            if raw_prediction < 15:
+                predicted_price = float(np.expm1(raw_prediction))
+            else:
+                predicted_price = raw_prediction
 
             # Auto-convert >= 100 Lakhs to Crore
             if predicted_price >= 100:
