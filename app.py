@@ -70,13 +70,15 @@ try:
 
             # Encode categoricals using fitted OneHotEncoder
             cat_encoded = encoder.transform(cat_df)
-            
-            # Use get_feature_names_out on encoder directly
             encoded_feature_names = encoder.get_feature_names_out(cat_features)
             cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoded_feature_names)
 
             # Combine numerical and encoded categorical features
             X_input = pd.concat([num_df.reset_index(drop=True), cat_encoded_df.reset_index(drop=True)], axis=1)
+
+            # Align column sequence dynamically with model training order
+            if hasattr(model, "feature_names_in_"):
+                X_input = X_input[model.feature_names_in_]
 
             # Scale features if scaler exists
             if scaler:
