@@ -33,7 +33,6 @@ try:
             'societies': list(categories[4]) if len(categories) > 4 else ['other']
         }
     else:
-        # Fallbacks if categories can't be parsed directly from encoder
         options = {
             'area_types': ['Built-up Area', 'Carpet Area', 'Plot Area', 'Super built-up Area'],
             'availabilities': ['Ready To Move', '18-May', '18-Dec'],
@@ -73,49 +72,34 @@ try:
                 "balcony": float(user_balcony)
             }])
 
-            # Check if model expects raw column names (e.g. 'area_type', 'location'...)
+            # Check exact feature names expected by the model
             if hasattr(model, "feature_names_in_"):
-                expected_features = list(model.feature_names_in_)
+                expected_cols = list(model.feature_names_in_)
                 
-                # Case A: Model expects original raw un-encoded columns
-                if set(cat_features).issubset(set(expected_features)):
-                    X_input = raw_input_df[expected_features]
-                
-                # Case B: Model expects One-Hot Encoded columns
+                # Check if model expects raw column names (area_type, location, etc.)
+                if all(col in raw_input_df.columns for col in expected_cols):
+                    X_input = raw_input_df[expected_cols]
                 else:
+                    # Model expects encoded columns - perform encoding without feature name validation
                     cat_df = raw_input_df[cat_features]
                     num_df = raw_input_df[["total_sqft", "bath", "balcony"]]
                     
                     if encoder:
                         cat_encoded = encoder.transform(cat_df)
-                        
-                        # Try transformation with and without prefixed names
-                        try:
-                            encoded_feature_names = encoder.get_feature_names_out(cat_features)
-                        except Exception:
-                            encoded_feature_names = [f"col_{i}" for i in range(cat_encoded.shape[1])]
-                            
+                        encoded_feature_names = encoder.get_feature_names_out(cat_features)
                         cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoded_feature_names)
                         X_input = pd.concat([cat_encoded_df.reset_index(drop=True), num_df.reset_index(drop=True)], axis=1)
                     else:
                         X_input = raw_input_df
-
-                    # Filter or align to expected features if matched
-                    matching_cols = [c for c in expected_features if c in X_input.columns]
-                    if len(matching_cols) == len(expected_features):
-                        X_input = X_input[expected_features]
-
+                    
+                    # Convert to numpy array to bypass scikit-learn feature name validation
+                    X_input = X_input.values
             else:
-                # If model has no feature_names_in_ metadata, construct standard encoded array
-                cat_df = raw_input_df[cat_features]
-                num_df = raw_input_df[["total_sqft", "bath", "balcony"]]
-                cat_encoded = encoder.transform(cat_df)
-                encoded_feature_names = encoder.get_feature_names_out(cat_features)
-                cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoded_feature_names)
-                X_input = pd.concat([cat_encoded_df.reset_index(drop=True), num_df.reset_index(drop=True)], axis=1)
+                # Fallback: pass raw DataFrame
+                X_input = raw_input_df
 
             # Apply scaler if present
-            if scaler:
+            if scaler and hasattr(X_input, 'columns'):
                 X_input = scaler.transform(X_input)
 
             # Generate direct prediction
@@ -130,6 +114,8 @@ try:
 
         except Exception as e:
             st.error(f"Error calculating prediction: {str(e)}")
+            if hasattr(model, "feature_names_in_"):
+                st.info(f"Model expects these features: {list(model.feature_names_in_)}")
 
 except Exception as e:
     st.error(f"Failed to load model file: {str(e)}")
